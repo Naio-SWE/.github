@@ -59,6 +59,7 @@ jobs:
         with:
           repository: Naio-SWE/.github
           path: .github-repo
+          token: ${{ secrets.GITHUB_TOKEN }} 
       
       - name: Show environment info
         run: ./.github-repo/scripts/dockerless-build-action/show-env.sh
