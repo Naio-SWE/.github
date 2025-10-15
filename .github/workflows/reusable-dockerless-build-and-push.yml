@@ -55,30 +55,30 @@ jobs:
         uses: actions/checkout@v5
       
       - name: Show environment info
-        run: ./scripts/show-env.sh
+        run: ./scripts/dockerless-build-action/show-env.sh
       
       - name: Configure Buildah storage
-        run: ./scripts/configure-storage.sh
+        run: ./scripts/dockerless-build-action/configure-storage.sh
       
       - name: Login to registry
         env:
           REGISTRY_USERNAME: ${{ secrets.registry_username }}
           REGISTRY_PASSWORD: ${{ secrets.registry_password }}
-        run: ./scripts/registry-login.sh
+        run: ./scripts/dockerless-build-action/registry-login.sh
       
       - name: Build Docker image
         env:
           IMAGE_TAG: ${{ github.sha }}
-        run: ./scripts/build-image.sh
+        run: ./scripts/dockerless-build-action/build-image.sh
       
       - name: Push image to registry
         env:
           IMAGE_TAG: ${{ github.sha }}
-        run: ./scripts/push-image.sh
+        run: ./scripts/dockerless-build-action/push-image.sh
       
       - name: Verify image
-        run: ./scripts/verify-image.sh
+        run: ./scripts/dockerless-build-action/verify-image.sh
       
       - name: Cleanup
         if: always()
-        run: ./scripts/cleanup.sh
+        run: ./scripts/dockerless-build-action/cleanup.sh
