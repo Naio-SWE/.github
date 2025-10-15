@@ -1,0 +1,159 @@
+name: Reusable Dockerless Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        required: false
+        type: string 
+        default: 'Dockerfile'
+        description: 'Path to the dockerfile'
+      build_target:
+        required: false
+        type: string
+        default: ''
+        description: 'Build target (optional)'
+      registry: 
+        required: true
+        type: string 
+        description: 'Container registry URL'
+      image_name: 
+        required: true
+        type: string
+        description: 'Image name (without the registry)'
+      runner_label: 
+        required: false
+        type: string 
+        default: 'gpu-runners'
+        description: 'Runner label to use'
+      skip_verification:
+        required: false
+        type: boolean
+        default: false
+        description: 'Skip pulling and verifying the image'
+    secrets:
+      registry_username:
+        required: true
+      registry_password: 
+        required: true 
+
+env:
+  REGISTRY: ${{ inputs.registry }}
+  IMAGE_NAME: ${{ inputs.image_name }}
+  STORAGE_DRIVER: vfs 
+  BUILDAH_ISOLATION: chroot 
+
+jobs:
+  build-and-push:
+    runs-on: ${{ inputs.runner_label }}
+    container:
+      image: quay.io/buildah/stable:latest
+      options: >-
+        --user 0
+        --privileged
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined
+        --device /dev/fuse
+        --cap-add SYS_ADMIN
+        --cap-add SYS_CHROOT
+        --cap-add SETUID
+        --cap-add SETGID
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      
+      - name: Show environment info
+        run: |
+          echo "========================================="
+          echo "Environment Information"
+          echo "========================================="
+          echo "Runner: $(uname -a)"
+          echo "Buildah version: $(buildah --version)"
+          echo "Working directory: $(pwd)"
+          echo "Registry: ${REGISTRY}"
+          echo "Image name: ${IMAGE_NAME}"
+          echo "Git commit: ${GITHUB_SHA}"
+          echo "Git ref: ${GITHUB_REF}"
+          echo "Dockerfile: ${{ inputs.dockerfile }}"
+          echo "Build target: ${{ inputs.build_target }}"
+          echo "========================================="
+      
+      - name: Configure Buildah storage
+        run: |
+          echo "Configuring Buildah storage..."
+          mkdir -p /var/lib/containers/storage
+          mkdir -p ~/.config/containers
+          
+          cat > ~/.config/containers/storage.conf <<EOF
+          [storage]
+          driver = "vfs"
+          graphroot = "/var/lib/containers/storage"
+          runroot = "/var/run/containers/storage"
+          EOF
+          
+          echo "✓ Storage configured"
+      
+      - name: Login to registry
+        run: |
+          echo "Logging into ${REGISTRY}..."
+          
+          if [ -z "${{ secrets.registry_username }}" ] || [ -z "${{ secrets.registry_password }}" ]; then
+            echo "❌ Error: registry_username or registry_password not set"
+            exit 1
+          fi
+          
+          echo "${{ secrets.registry_password }}" | buildah login \
+            --tls-verify=false \
+            -u "${{ secrets.registry_username }}" \
+            --password-stdin \
+            "${REGISTRY}"
+          
+          echo "✓ Successfully logged in to ${REGISTRY}"
+      
+      - name: Build Docker image
+        run: |
+          echo "Building Docker image..."
+          
+          export STORAGE_DRIVER=vfs
+          export BUILDAH_ISOLATION=chroot
+          
+          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          
+          echo "Image: ${REGISTRY}/${IMAGE_NAME}"
+          echo "Tags: latest, ${SHORT_SHA}"
+          echo "Build date: ${BUILD_DATE}"
+          echo "Dockerfile: ${{ inputs.dockerfile }}"
+          echo "Storage driver: vfs"
+          echo "Isolation: chroot"
+          
+          BUILD_ARGS=""
+          if [ -n "${{ inputs.build_target }}" ]; then
+            BUILD_ARGS="--target ${{ inputs.build_target }}"
+          fi
+          
+          buildah --storage-driver=vfs bud \
+            --isolation=chroot \
+            --format docker \
+            -f ${{ inputs.dockerfile }} \
+            ${BUILD_ARGS} \
+            -t "${REGISTRY}/${IMAGE_NAME}:latest" \
+            -t "${REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}" \
+            --build-arg VERSION="${SHORT_SHA}" \
+            --build-arg BUILD_DATE="${BUILD_DATE}" \
+            --layers \
+            .
+          
+          echo "✓ Image built successfully"
+          echo ""
+          echo "Built images:"
+          buildah --storage-driver=vfs images | grep "${IMAGE_NAME}" || true
+      
+      - name: Push image to registry
+        run: |
+          echo "Pushing images to ${REGISTRY}..."
+          
+          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          
+          # Push la
