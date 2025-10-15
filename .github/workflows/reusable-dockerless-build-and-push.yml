@@ -51,34 +51,40 @@ jobs:
         --cap-add SETGID
     
     steps:
-      - name: Checkout repository
+      - name: Checkout calling repository
         uses: actions/checkout@v5
       
+      - name: Checkout .github repo for scripts
+        uses: actions/checkout@v5
+        with:
+          repository: Naio-SWE/.github
+          path: .github-repo
+      
       - name: Show environment info
-        run: ./scripts/dockerless-build-action/show-env.sh
+        run: ./.github-repo/scripts/dockerless-build-action/show-env.sh
       
       - name: Configure Buildah storage
-        run: ./scripts/dockerless-build-action/configure-storage.sh
+        run: ./.github-repo/scripts/dockerless-build-action/configure-storage.sh
       
       - name: Login to registry
         env:
           REGISTRY_USERNAME: ${{ secrets.registry_username }}
           REGISTRY_PASSWORD: ${{ secrets.registry_password }}
-        run: ./scripts/dockerless-build-action/registry-login.sh
+        run: ./.github-repo/scripts/dockerless-build-action/registry-login.sh
       
       - name: Build Docker image
         env:
           IMAGE_TAG: ${{ github.sha }}
-        run: ./scripts/dockerless-build-action/build-image.sh
+        run: ./.github-repo/scripts/dockerless-build-action/build-image.sh
       
       - name: Push image to registry
         env:
           IMAGE_TAG: ${{ github.sha }}
-        run: ./scripts/dockerless-build-action/push-image.sh
+        run: ./.github-repo/scripts/dockerless-build-action/push-image.sh
       
       - name: Verify image
-        run: ./scripts/dockerless-build-action/verify-image.sh
+        run: ./.github-repo/scripts/dockerless-build-action/verify-image.sh
       
       - name: Cleanup
         if: always()
-        run: ./scripts/dockerless-build-action/cleanup.sh
+        run: ./.github-repo/scripts/dockerless-build-action/cleanup.sh
