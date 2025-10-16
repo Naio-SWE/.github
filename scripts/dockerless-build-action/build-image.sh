@@ -3,7 +3,7 @@ set -e
 
 echo "Building Docker image..."
 
-export STORAGE_DRIVER=vfs
+export STORAGE_DRIVER=overlay # ← Change this
 export BUILDAH_ISOLATION=chroot
 
 SHORT_SHA=$(echo "${IMAGE_TAG:-${GITHUB_SHA}}" | cut -c1-7)
@@ -12,6 +12,8 @@ BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 echo "Image: ${REGISTRY}/${IMAGE_NAME}"
 echo "Tags: latest, ${SHORT_SHA}"
 echo "Build date: ${BUILD_DATE}"
+echo "Storage driver: overlay" # ← Update this
+echo "Isolation: chroot"
 echo "Dockerfile: ${DOCKERFILE:-Dockerfile}"
 echo "Build target: ${BUILD_TARGET:-none}"
 
@@ -22,8 +24,8 @@ if [ -n "${BUILD_TARGET}" ]; then
   echo "Using build target: ${BUILD_TARGET}"
 fi
 
-buildah --storage-driver=vfs bud \
-  --isolation=chroot \
+buildah --storage-driver=overlay bud \  # ← Change this
+--isolation=chroot \
   --format docker \
   -f ${DOCKERFILE:-Dockerfile} \
   ${TARGET_ARG} \
