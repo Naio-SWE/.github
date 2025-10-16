@@ -1,48 +1,24 @@
 name: Reusable Dockerless Build and Push
 
 on:
-  workflow_call:
-    inputs:
-      dockerfile:
-        required: false
-        type: string 
-        default: 'Dockerfile'
-        description: 'Path to the dockerfile'
-      build_target:
-        required: false
-        type: string
-        default: ''
-        description: 'Build target for multi-stage builds (e.g., ci, production)'
-      registry: 
-        required: true
-        type: string 
-        description: 'Container registry URL'
-      image_name: 
-        required: true
-        type: string
-        description: 'Image name (without the registry)'
-      runner_label: 
-        required: false
-        type: string 
-        default: 'gpu-runners'
-        description: 'Runner label to use'
-    secrets:
-      registry_username:
-        required: true
-      registry_password: 
-        required: true 
+  push:
+    branches: [ new-yasp-compile ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ new-yasp-compile ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
 
 env:
-  REGISTRY: ${{ inputs.registry }}
-  IMAGE_NAME: ${{ inputs.image_name }}
+  REGISTRY: registry.yasp.localdomain:5050
+  IMAGE_NAME: yasp-compile
   STORAGE_DRIVER: overlay
   BUILDAH_ISOLATION: chroot
-  DOCKERFILE: ${{ inputs.dockerfile }}
-  BUILD_TARGET: ${{ inputs.build_target }}
+  DOCKERFILE: Dockerfile
+  BUILD_TARGET: ci
 
 jobs:
   build-and-push:
-    runs-on: ${{ inputs.runner_label }}
+    runs-on: gpu-runners
     container:
       image: quay.io/buildah/stable:latest
       options: >-
@@ -73,16 +49,16 @@ jobs:
           [ -f Dockerfile ] && echo "YES - Dockerfile found!" || echo "NO - Dockerfile NOT found!"
           echo ""
           echo "Contents of /:"
-          ls -la / || echo "Can't list /"
+          ls -la / 2>/dev/null || echo "Can't list /"
           echo ""
           echo "Contents of /__w:"
           ls -la /__w 2>/dev/null || echo "/__w doesn't exist"
           echo ""
-          echo "Contents of /__w/workflow-tests:"
-          ls -la /__w/workflow-tests 2>/dev/null || echo "/__w/workflow-tests doesn't exist"
+          echo "Contents of /__w/.github:"
+          ls -la /__w/.github 2>/dev/null || echo "/__w/.github doesn't exist"
           echo ""
-          echo "Contents of /__w/workflow-tests/workflow-tests:"
-          ls -la /__w/workflow-tests/workflow-tests 2>/dev/null || echo "/__w/workflow-tests/workflow-tests doesn't exist"
+          echo "Contents of /__w/.github/.github:"
+          ls -la /__w/.github/.github 2>/dev/null || echo "/__w/.github/.github doesn't exist"
       
       - name: Checkout .github repo for scripts
         uses: actions/checkout@v5
@@ -100,8 +76,8 @@ jobs:
           echo ".github-repo exists?"
           [ -d .github-repo ] && echo "YES" || echo "NO"
           echo ""
-          echo "Contents of .github-repo:"
-          ls -la .github-repo 2>/dev/null || echo ".github-repo doesn't exist"
+          echo "Contents of .github-repo/scripts:"
+          ls -la .github-repo/scripts 2>/dev/null || echo ".github-repo/scripts doesn't exist"
       
       - name: Show environment info
         run: ./.github-repo/scripts/dockerless-build-action/show-env.sh
@@ -111,8 +87,8 @@ jobs:
       
       - name: Login to registry
         env:
-          REGISTRY_USERNAME: ${{ secrets.registry_username }}
-          REGISTRY_PASSWORD: ${{ secrets.registry_password }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
         run: ./.github-repo/scripts/dockerless-build-action/registry-login.sh
       
       - name: DEBUG - Right before build
@@ -121,10 +97,10 @@ jobs:
           echo "Current directory: $(pwd)"
           ls -la
           echo ""
-          echo "Dockerfile location:"
-          find . -name "Dockerfile" -type f 2>/dev/null || echo "Dockerfile not found anywhere"
+          echo "Searching for Dockerfile:"
+          find . -name "Dockerfile*" -type f 2>/dev/null || echo "No Dockerfile found"
           echo ""
-          echo "All files in workspace:"
+          echo "First 20 files in workspace:"
           find . -type f 2>/dev/null | head -20
       
       - name: Build Docker image
