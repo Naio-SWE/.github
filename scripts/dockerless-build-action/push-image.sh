@@ -29,12 +29,3 @@ echo "SUCCESS! Images available at:"
 echo "  - ${REGISTRY}/${IMAGE_NAME}:latest"
 echo "  - ${REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}"
 echo "========================================="
-$()$(
-
-  ## Why It Works Without the Flag:
-
-  When you run
-)configure-storage.sh$(, it creates)~/.config/containers/storage.conf$(
-  with:
-)$()
-driver = "overlay"
