@@ -8,6 +8,11 @@ on:
         type: string 
         default: 'Dockerfile'
         description: 'Path to the dockerfile'
+      build_target:
+        required: false
+        type: string
+        default: ''
+        description: 'Build target for multi-stage builds (e.g., ci, production)'
       registry: 
         required: true
         type: string 
@@ -33,6 +38,7 @@ env:
   STORAGE_DRIVER: vfs 
   BUILDAH_ISOLATION: chroot
   DOCKERFILE: ${{ inputs.dockerfile }}
+  BUILD_TARGET: ${{ inputs.build_target }}
 
 jobs:
   build-and-push:
