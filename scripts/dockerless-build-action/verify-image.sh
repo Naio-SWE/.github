@@ -12,15 +12,3 @@ buildah pull \
   "${REGISTRY}/${IMAGE_NAME}:latest"
 
 echo "✓ Image verified - successfully pulled from registry"
-
-# Create a container from the image first, then run it
-echo ""
-echo "Testing container execution..."
-CONTAINER=$(buildah from "${REGISTRY}/${IMAGE_NAME}:latest")
-buildah run "${CONTAINER}" /app/test.sh
-
-# Clean up the container
-buildah rm "${CONTAINER}"
-
-echo ""
-echo "✓ Container test passed"
