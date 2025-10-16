@@ -2,6 +2,10 @@
 set -e
 
 echo "Building Docker image..."
+echo "Current directory: $(pwd)"
+echo "GITHUB_WORKSPACE: ${GITHUB_WORKSPACE}"
+
+# Set storage configuration
 export STORAGE_DRIVER=overlay
 export BUILDAH_ISOLATION=chroot
 
@@ -16,6 +20,23 @@ echo "Isolation: chroot"
 echo "Dockerfile: ${DOCKERFILE:-Dockerfile}"
 echo "Build target: ${BUILD_TARGET:-none}"
 
+# CRITICAL FIX: Make sure we're in the right directory
+# GitHub Actions sets GITHUB_WORKSPACE to the checkout directory
+if [ -n "${GITHUB_WORKSPACE}" ] && [ -d "${GITHUB_WORKSPACE}" ]; then
+  cd "${GITHUB_WORKSPACE}"
+  echo "Changed to workspace directory: $(pwd)"
+fi
+
+# Verify Dockerfile exists
+if [ ! -f "${DOCKERFILE:-Dockerfile}" ]; then
+  echo "ERROR: Dockerfile not found in $(pwd)"
+  echo "Contents of current directory:"
+  ls -la
+  exit 1
+fi
+
+echo "Found Dockerfile at: $(pwd)/${DOCKERFILE:-Dockerfile}"
+
 # Build target argument
 TARGET_ARG=""
 if [ -n "${BUILD_TARGET}" ]; then
@@ -23,30 +44,17 @@ if [ -n "${BUILD_TARGET}" ]; then
   echo "Using build target: ${BUILD_TARGET}"
 fi
 
-DOCKERFILE_PATH="$(pwd)/${DOCKERFILE:-Dockerfile}"
-BUILD_CONTEXT="$(pwd)"
-
-echo "Using Dockerfile: ${DOCKERFILE_PATH}"
-echo "Build context: ${BUILD_CONTEXT}"
-
-# Check if Dockerfile exists
-if [ ! -f "${DOCKERFILE_PATH}" ]; then
-  echo "ERROR: Dockerfile not found at ${DOCKERFILE_PATH}"
-  echo "Current directory contents:"
-  ls -la
-  exit 1
-fi
-
+# Build the image
 buildah --storage-driver=overlay bud \
   --isolation=chroot \
   --format docker \
-  -f "${DOCKERFILE_PATH}" \
+  -f ${DOCKERFILE:-Dockerfile} \
   ${TARGET_ARG} \
   -t "${REGISTRY}/${IMAGE_NAME}:latest" \
   -t "${REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}" \
   --build-arg VERSION="${SHORT_SHA}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --layers \
-  "${BUILD_CONTEXT}"
+  .
 
 echo "✓ Image built successfully"
