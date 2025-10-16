@@ -35,7 +35,7 @@ on:
 env:
   REGISTRY: ${{ inputs.registry }}
   IMAGE_NAME: ${{ inputs.image_name }}
-  STORAGE_DRIVER: vfs 
+  STORAGE_DRIVER: overlay  # ← Change from vfs to overlay
   BUILDAH_ISOLATION: chroot
   DOCKERFILE: ${{ inputs.dockerfile }}
   BUILD_TARGET: ${{ inputs.build_target }}
