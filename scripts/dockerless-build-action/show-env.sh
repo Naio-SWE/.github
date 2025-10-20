@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+#show-env.sh
 echo "========================================="
 echo "Environment Information"
 echo "========================================="

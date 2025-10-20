@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-
+#registry-login.sh
 echo "Logging into ${REGISTRY}..."
 
 if [ -z "${REGISTRY_USERNAME}" ] || [ -z "${REGISTRY_PASSWORD}" ]; then

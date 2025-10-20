@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-
+#configure-storage.sh
 echo "Configuring Buildah storage..."
 
 # Create directories - use mounted path

@@ -1,4 +1,6 @@
 #!/bin/bash
+
+#build-image.sh
 set -e
 
 echo "========================================="
@@ -111,14 +113,31 @@ if [ -n "${BUILD_TARGET}" ]; then
   TARGET_ARG="--target ${BUILD_TARGET}"
 fi
 
+# Prepare tags - always include latest and short SHA
+TAGS="-t ${REGISTRY}/${IMAGE_NAME}:latest -t ${REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}"
+
+# Add custom tag if provided
+if [ -n "${CUSTOM_TAG}" ]; then
+  echo "   Adding custom tag: ${CUSTOM_TAG}"
+  TAGS="${TAGS} -t ${REGISTRY}/${IMAGE_NAME}:${CUSTOM_TAG}"
+else
+  echo "   No custom tag provided, using default tags only"
+fi
+
+echo "   Tags to be created:"
+echo "     - ${REGISTRY}/${IMAGE_NAME}:latest"
+echo "     - ${REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}"
+if [ -n "${CUSTOM_TAG}" ]; then
+  echo "     - ${REGISTRY}/${IMAGE_NAME}:${CUSTOM_TAG}"
+fi
+
 # Try the build with maximum verbosity
 buildah --storage-driver=${STORAGE_DRIVER:-overlay} bud \
   --isolation=${BUILDAH_ISOLATION:-chroot} \
   --format docker \
   -f "$DOCKERFILE_LOCATION" \
   ${TARGET_ARG} \
-  -t "${REGISTRY}/${IMAGE_NAME}:latest" \
-  -t "${REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}" \
+  ${TAGS} \
   --build-arg VERSION="${SHORT_SHA}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --layers \

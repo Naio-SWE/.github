@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+#verify-image.sh
 echo "Verifying pushed image..."
 
 # Remove local image first to ensure we're pulling from registry
