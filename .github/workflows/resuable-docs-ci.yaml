@@ -1,0 +1,100 @@
+name: Reusable Documentation Build
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: 'Python version to use (e.g., 3.12, 3.11, 3.10)'
+        required: false
+        type: string
+        default: '3.12'
+      requirements-file:
+        description: 'Path to requirements file'
+        required: false
+        type: string
+        default: 'requirements-dev.txt'
+      build-command:
+        description: 'Command to build documentation'
+        required: false
+        type: string
+        default: 'hatch run docs:build -d /site'
+      output-directory:
+        description: 'Directory where docs are built'
+        required: false
+        type: string
+        default: '/site'
+      artifact-name:
+        description: 'Name for the documentation artifact'
+        required: false
+        type: string
+        default: 'documentation-site'
+      artifact-retention-days:
+        description: 'Days to retain the artifact'
+        required: false
+        type: number
+        default: 30
+      runner-label:
+        description: 'Runner label to use'
+        required: false
+        type: string
+        default: 'cpu-runners'
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner-label }}
+    container:
+      image: python:${{ inputs.python-version }}-slim
+    steps:
+      - name: Debug workflow context
+        run: |
+          echo "💡 Event: ${{ github.event_name }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Python: ${{ inputs.python-version }}"
+          echo "Requirements: ${{ inputs.requirements-file }}"
+          echo "Build command: ${{ inputs.build-command }}"
+          echo "Output directory: ${{ inputs.output-directory }}"
+          
+      - name: Set up Git
+        run: |
+          apt-get update && apt-get install -y git
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git config --global --add safe.directory '*'
+        
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          clean: true
+
+      - name: Check git content
+        run: |
+          ls -la
+          git tag || echo "No tags"
+          git log --oneline -n 5
+          
+      - name: Install dependencies
+        run: pip install -r ${{ inputs.requirements-file }}
+      
+      - name: Build docs
+        run: ${{ inputs.build-command }}
+      
+      - name: Verify build output
+        run: |
+          if [ -d "${{ inputs.output-directory }}" ]; then
+            echo "✅ Build successful!"
+            echo "Contents of ${{ inputs.output-directory }}:"
+            ls -la ${{ inputs.output-directory }}/
+          else
+            echo "❌ Build failed - output directory not found!"
+            exit 1
+          fi
+      
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.output-directory }}
+          retention-days: ${{ inputs.artifact-retention-days }}
