@@ -7,7 +7,12 @@ on:
         required: false
         type: string 
         default: 'Dockerfile'
-        description: 'Path to the dockerfile'
+        description: 'Path to the dockerfile relative to workspace root'
+      build_context:
+        required: false
+        type: string
+        default: '.'
+        description: 'Build context directory relative to workspace root'
       build_target:
         required: false
         type: string
@@ -43,6 +48,7 @@ env:
   STORAGE_DRIVER: overlay
   BUILDAH_ISOLATION: chroot
   DOCKERFILE: ${{ inputs.dockerfile }}
+  BUILD_CONTEXT: ${{ inputs.build_context }}
   BUILD_TARGET: ${{ inputs.build_target }}
   CUSTOM_TAG: ${{ inputs.custom_tag }}
 
@@ -65,15 +71,28 @@ jobs:
         -v /var/cache/buildah:/var/cache/buildah
     
     steps:
-      - name: Checkout calling repository
-        uses: actions/checkout@v5
+      # NO CHECKOUT STEP - Caller must provide the code
       
+      # Only checkout the scripts repository
       - name: Checkout .github repo for scripts
         uses: actions/checkout@v5
         with:
           repository: Naio-SWE/.github
           path: .github-repo
           token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Validate workspace has code
+        run: |
+          echo "Validating workspace contains code..."
+          if [ ! -f "${DOCKERFILE}" ] && [ ! -f "${GITHUB_WORKSPACE}/${DOCKERFILE}" ]; then
+            echo "ERROR: Dockerfile not found at ${DOCKERFILE}"
+            echo "The calling workflow must checkout code before calling this reusable workflow!"
+            echo ""
+            echo "Current workspace contents:"
+            ls -la
+            exit 1
+          fi
+          echo "✓ Workspace validated - code is present"
       
       - name: Show environment info
         run: ./.github-repo/scripts/dockerless-build-action/show-env.sh
