@@ -7,7 +7,7 @@ on:
         description: 'Python version to use'
         required: false
         type: string
-        default: '3.x'
+        default: '3.12'
       requirements-file:
         description: 'Path to requirements file'
         required: false
@@ -40,28 +40,31 @@ on:
         required: false
         type: number
         default: 7
-    secrets:
-      deploy-token:
-        description: 'GitHub token with write access to pages repository'
-        required: true
 
 jobs:
   build-and-deploy:
     if: contains(inputs.allowed-repositories, github.repository)
     runs-on: cpu-runners
-    # NO CONTAINER DIRECTIVE HERE - this is the key change
+    container:
+      image: python:${{ inputs.python-version }}-slim
+      options: --user root  # Required for git operations
     permissions:
       contents: read
     env:
       PUBLISH_PATH: ${{ inputs.publish-path }}
+      DOCS_TOKEN: ${{ secrets.DOCS_DEPLOY }}
     steps:
+      # Install dependencies first
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y git rsync curl
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global --add safe.directory '*'
+
       - name: Checkout source repo
         uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python-version }}
 
       - name: Install MkDocs + plugins
         run: |
@@ -79,31 +82,38 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
-      - name: Checkout Pages repo (production)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.pages-repository }}
-          ref: ${{ inputs.pages-branch }}
-          token: ${{ secrets.deploy-token }}
-          path: pages
+      # Direct git clone - bypass checkout action for Pages repo
+      - name: Clone Pages repo directly
+        run: |
+          echo "Cloning pages repository..."
+          # Use the token directly in the URL
+          git clone https://oauth2:${DOCS_TOKEN}@github.com/${{ inputs.pages-repository }}.git pages
+          cd pages
+          git checkout ${{ inputs.pages-branch }}
+          echo "✅ Successfully cloned pages repository"
 
-      - name: Sync built site into /${{ env.PUBLISH_PATH }}
+      - name: Sync built site
         run: |
           set -euo pipefail
           mkdir -p "pages/${{ env.PUBLISH_PATH }}"
           rsync -a --delete site/ "pages/${{ env.PUBLISH_PATH }}/"
+          echo "✅ Site synced to pages/${{ env.PUBLISH_PATH }}"
 
-      - name: Commit & push to ${{ inputs.pages-branch }} (Pages repo)
+      - name: Commit and push changes
         run: |
           set -euo pipefail
           cd pages
-          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          
           if [ -n "$(git status --porcelain)" ]; then
+            echo "📝 Changes detected, committing..."
             git add -A
-            git commit -m "Publish docs from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-            git push origin ${{ inputs.pages-branch }}
+            git commit -m "Publish docs from ${GITHUB_REPOSITORY}@${GITHUB_SHA:0:7}"
+            
+            # Push using token in URL
+            git push https://oauth2:${DOCS_TOKEN}@github.com/${{ inputs.pages-repository }}.git ${{ inputs.pages-branch }}
             echo "✅ Successfully published to ${{ inputs.pages-repository }}"
           else
-            echo "ℹ️ No changes to publish."
+            echo "ℹ️ No changes to publish"
           fi
