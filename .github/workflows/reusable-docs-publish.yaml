@@ -60,7 +60,6 @@ jobs:
       contents: read
     env:
       PUBLISH_PATH: ${{ inputs.publish-path }}
-      GITHUB_TOKEN: ${{ secrets.deploy-token }}  # Set token as env variable
     steps:
       - name: Install system dependencies
         run: |
@@ -90,36 +89,27 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
-      - name: Configure git for authentication
+      - name: Clone and deploy to Pages repo
+        env:
+          TOKEN: ${{ secrets.deploy-token }}
         run: |
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "git@github.com:"
-
-      - name: Checkout Pages repo (production)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.pages-repository }}
-          ref: ${{ inputs.pages-branch }}
-          path: pages
-          persist-credentials: false  # Important: don't use checkout's built-in auth
-
-      - name: Sync built site into /${{ env.PUBLISH_PATH }}
-        run: |
-          set -euo pipefail
-          mkdir -p "pages/${{ env.PUBLISH_PATH }}"
-          rsync -a --delete site/ "pages/${{ env.PUBLISH_PATH }}/"
-
-      - name: Commit & push to ${{ inputs.pages-branch }} (Pages repo)
-        run: |
-          set -euo pipefail
+          # Simple clone without any fancy options
+          git clone https://${TOKEN}@github.com/${{ inputs.pages-repository }}.git pages
+          
+          # Copy files
+          mkdir -p pages/${{ inputs.publish-path }}
+          rsync -a --delete site/ pages/${{ inputs.publish-path }}/
+          
+          # Commit and push
           cd pages
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
+          
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "Publish docs from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-            git push origin ${{ inputs.pages-branch }}
-            echo "✅ Successfully published to ${{ inputs.pages-repository }}"
+            git push
+            echo "✅ Successfully published"
           else
             echo "ℹ️ No changes to publish."
           fi
