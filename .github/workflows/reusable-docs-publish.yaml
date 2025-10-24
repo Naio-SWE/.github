@@ -60,6 +60,7 @@ jobs:
       contents: read
     env:
       PUBLISH_PATH: ${{ inputs.publish-path }}
+      GITHUB_TOKEN: ${{ secrets.deploy-token }}  # Set token as env variable
     steps:
       - name: Install system dependencies
         run: |
@@ -89,19 +90,18 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
-      - name: Clone Pages repo manually
-        env:
-          TOKEN: ${{ secrets.deploy-token }}
-          REPO: ${{ inputs.pages-repository }}
-          BRANCH: ${{ inputs.pages-branch }}
+      - name: Configure git for authentication
         run: |
-          echo "Cloning repository..."
-          CLONE_URL="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
-          git clone "$CLONE_URL" pages --depth=1 --branch="$BRANCH"
-          cd pages
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          echo "✅ Successfully cloned pages repository"
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "git@github.com:"
+
+      - name: Checkout Pages repo (production)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.pages-repository }}
+          ref: ${{ inputs.pages-branch }}
+          path: pages
+          persist-credentials: false  # Important: don't use checkout's built-in auth
 
       - name: Sync built site into /${{ env.PUBLISH_PATH }}
         run: |
@@ -110,19 +110,16 @@ jobs:
           rsync -a --delete site/ "pages/${{ env.PUBLISH_PATH }}/"
 
       - name: Commit & push to ${{ inputs.pages-branch }} (Pages repo)
-        env:
-          TOKEN: ${{ secrets.deploy-token }}
-          REPO: ${{ inputs.pages-repository }}
-          BRANCH: ${{ inputs.pages-branch }}
         run: |
           set -euo pipefail
           cd pages
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "Publish docs from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-            PUSH_URL="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
-            git push "$PUSH_URL" "$BRANCH"
-            echo "✅ Successfully published to $REPO"
+            git push origin ${{ inputs.pages-branch }}
+            echo "✅ Successfully published to ${{ inputs.pages-repository }}"
           else
             echo "ℹ️ No changes to publish."
           fi
