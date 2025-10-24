@@ -47,14 +47,15 @@ jobs:
     runs-on: cpu-runners
     container:
       image: python:${{ inputs.python-version }}-slim
-      options: --user root  # Required for git operations
+      options: --user root
     permissions:
       contents: read
     env:
       PUBLISH_PATH: ${{ inputs.publish-path }}
       DOCS_TOKEN: ${{ secrets.DOCS_DEPLOY }}
+      PAGES_REPO: ${{ inputs.pages-repository }}
+      PAGES_BRANCH: ${{ inputs.pages-branch }}
     steps:
-      # Install dependencies first
       - name: Install system dependencies
         run: |
           apt-get update
@@ -82,38 +83,38 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
-      # Direct git clone - bypass checkout action for Pages repo
-      - name: Clone Pages repo directly
+      - name: Clone Pages repo
         run: |
-          echo "Cloning pages repository..."
-          # Use the token directly in the URL
-          git clone https://oauth2:${DOCS_TOKEN}@github.com/${{ inputs.pages-repository }}.git pages
+          echo "Setting up pages repository..."
+          mkdir pages
           cd pages
-          git checkout ${{ inputs.pages-branch }}
-          echo "✅ Successfully cloned pages repository"
+          git init
+          git remote add origin "https://github.com/${PAGES_REPO}.git"
+          git config http."https://github.com/".extraheader "AUTHORIZATION: bearer ${DOCS_TOKEN}"
+          echo "Fetching ${PAGES_BRANCH} branch..."
+          git fetch origin "${PAGES_BRANCH}"
+          git checkout "${PAGES_BRANCH}"
+          echo "✅ Successfully setup pages repository"
 
       - name: Sync built site
         run: |
           set -euo pipefail
-          mkdir -p "pages/${{ env.PUBLISH_PATH }}"
-          rsync -a --delete site/ "pages/${{ env.PUBLISH_PATH }}/"
-          echo "✅ Site synced to pages/${{ env.PUBLISH_PATH }}"
+          mkdir -p "pages/${PUBLISH_PATH}"
+          rsync -a --delete site/ "pages/${PUBLISH_PATH}/"
+          echo "✅ Site synced to pages/${PUBLISH_PATH}"
 
       - name: Commit and push changes
         run: |
           set -euo pipefail
           cd pages
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
           
           if [ -n "$(git status --porcelain)" ]; then
             echo "📝 Changes detected, committing..."
             git add -A
             git commit -m "Publish docs from ${GITHUB_REPOSITORY}@${GITHUB_SHA:0:7}"
-            
-            # Push using token in URL
-            git push https://oauth2:${DOCS_TOKEN}@github.com/${{ inputs.pages-repository }}.git ${{ inputs.pages-branch }}
-            echo "✅ Successfully published to ${{ inputs.pages-repository }}"
+            git config http."https://github.com/".extraheader "AUTHORIZATION: bearer ${DOCS_TOKEN}"
+            git push origin "${PAGES_BRANCH}"
+            echo "✅ Successfully published to ${PAGES_REPO}"
           else
             echo "ℹ️ No changes to publish"
           fi
