@@ -90,6 +90,19 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
+
+      - name: Debug Secret Availability
+        run: |
+          if [ -z "${{ secrets.deploy-token }}" ]; then
+            echo "❌ ERROR: deploy-token secret is EMPTY or NOT SET"
+            echo "The secret was not passed from the caller workflow"
+            exit 1
+          else
+            echo "✅ Token is available (length: ${#TOKEN})"
+          fi
+        env:
+          TOKEN: ${{ secrets.deploy-token }}
+
       - name: Checkout Pages repo (production)
         uses: actions/checkout@v4
         with:
