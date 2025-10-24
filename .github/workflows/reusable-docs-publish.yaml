@@ -48,7 +48,7 @@ on:
 jobs:
   build-and-deploy:
     if: contains(inputs.allowed-repositories, github.repository)
-    runs-on: [ self-hosted, cpu-only, Linux, X64 ]  # Your ARC runner labels
+    runs-on: cpu-runners
     # NO CONTAINER DIRECTIVE HERE - this is the key change
     permissions:
       contents: read
