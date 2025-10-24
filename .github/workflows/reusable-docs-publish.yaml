@@ -52,7 +52,6 @@ on:
 
 jobs:
   build-and-deploy:
-    # Check if current repo is in the allowed list
     if: contains(inputs.allowed-repositories, github.repository)
     runs-on: ${{ inputs.runner-label }}
     container:
@@ -90,26 +89,18 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ inputs.artifact-retention-days }}
 
-
-      - name: Debug Secret Availability
-        run: |
-          if [ -z "${{ secrets.deploy-token }}" ]; then
-            echo "❌ ERROR: deploy-token secret is EMPTY or NOT SET"
-            echo "The secret was not passed from the caller workflow"
-            exit 1
-          else
-            echo "✅ Token is available (length: ${#TOKEN})"
-          fi
+      - name: Clone Pages repo manually
         env:
           TOKEN: ${{ secrets.deploy-token }}
-
-      - name: Checkout Pages repo (production)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.pages-repository }}
-          ref: ${{ inputs.pages-branch }}
-          token: ${{ secrets.deploy-token }}
-          path: pages
+          REPO: ${{ inputs.pages-repository }}
+          BRANCH: ${{ inputs.pages-branch }}
+        run: |
+          echo "Cloning $REPO..."
+          git clone --depth 1 --branch $BRANCH https://x-access-token:${TOKEN}@github.com/${REPO}.git pages
+          cd pages
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          echo "✅ Successfully cloned pages repository"
 
       - name: Sync built site into /${{ env.PUBLISH_PATH }}
         run: |
@@ -118,13 +109,15 @@ jobs:
           rsync -a --delete site/ "pages/${{ env.PUBLISH_PATH }}/"
 
       - name: Commit & push to ${{ inputs.pages-branch }} (Pages repo)
+        env:
+          TOKEN: ${{ secrets.deploy-token }}
         run: |
           set -euo pipefail
           cd pages
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "Publish docs from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-            git push origin ${{ inputs.pages-branch }}
+            git push https://x-access-token:${TOKEN}@github.com/${{ inputs.pages-repository }}.git ${{ inputs.pages-branch }}
             echo "✅ Successfully published to ${{ inputs.pages-repository }}"
           else
             echo "ℹ️ No changes to publish."
