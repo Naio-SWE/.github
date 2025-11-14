@@ -3,12 +3,10 @@ set -e
 #configure-storage.sh
 echo "Configuring Buildah storage..."
 
-# Create directories - use mounted path
 mkdir -p /var/lib/containers/storage
 mkdir -p ~/.config/containers
 mkdir -p /etc/containers/registries.conf.d
 
-# Storage configuration - ensure graphroot points to mounted volume
 cat >~/.config/containers/storage.conf <<EOF
 [storage]
 driver = "overlay"
@@ -18,7 +16,6 @@ runroot = "/var/run/containers/storage"
 mount_program = "/usr/bin/fuse-overlayfs"
 EOF
 
-# Registry configuration for short-name resolution
 cat >/etc/containers/registries.conf.d/001-dockerio.conf <<EOF
 unqualified-search-registries = ["docker.io"]
 [[registry]]
@@ -41,7 +38,6 @@ EOF
 echo "✓ Storage configured with overlay driver"
 echo "✓ Registry configured with docker.io as default"
 
-# Show cached images to verify persistence
 echo ""
 echo "Checking for cached images:"
 buildah images 2>/dev/null || echo "No cached images yet"

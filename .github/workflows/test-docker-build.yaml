@@ -1,5 +1,6 @@
+#Testing workflow to see if it still works correctly, will test it with a docker image at a correct path.
 
-name: Reusable Dockerless Build and Push
+name: Reusable Dockerless Build and Push (TEST)
 
 on:
   workflow_call:
@@ -88,10 +89,10 @@ jobs:
           REGISTRY_PASSWORD: ${{ secrets.registry_password }}
         run: ./.github-repo/scripts/dockerless-build-action/registry-login.sh
       
-      - name: Build Docker image
+      - name: Build Docker image (NEW SCRIPT)  # ← Changed name
         env:
           IMAGE_TAG: ${{ github.sha }}
-        run: ./.github-repo/scripts/dockerless-build-action/build-image.sh
+        run: ./.github-repo/scripts/dockerless-build-action/new-build.sh  # ← Changed to new-build.sh
       
       - name: Push image to registry
         env:
