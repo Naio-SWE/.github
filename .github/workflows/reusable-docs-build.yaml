@@ -1,0 +1,104 @@
+name: Publish MkDocs to Pages (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      source_repository:
+        description: 'Source repository (org/repo)'
+        required: true
+        type: string
+      pages_repository:
+        description: 'Target Pages repository (org/repo)'
+        required: true
+        type: string
+      pages_ref:
+        description: 'Branch in Pages repo'
+        required: false
+        type: string
+        default: 'master'
+      publish_path:
+        description: 'Path within Pages repo (e.g., mk/swe-docs)'
+        required: true
+        type: string
+      requirements_file:
+        description: 'Path to requirements file'
+        required: false
+        type: string
+        default: 'requirements-docs.txt'
+      python_version:
+        description: 'Python version to use'
+        required: false
+        type: string
+        default: '3.x'
+      mkdocs_site_dir:
+        description: 'MkDocs site output directory'
+        required: false
+        type: string
+        default: 'site'
+      runner_labels:
+        description: 'Runner labels as JSON array string'
+        required: false
+        type: string
+        default: '["self-hosted", "cpu-only", "Linux", "X64"]'
+    secrets:
+      pages_deploy_token:
+        description: 'PAT with read/write access to Pages repo'
+        required: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install MkDocs + plugins
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ inputs.requirements_file }}
+    
+      - name: Build site
+        run: mkdocs build --strict --site-dir ${{ inputs.mkdocs_site_dir }}
+
+      - name: Upload built site (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: ${{ inputs.mkdocs_site_dir }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Checkout Pages repo (production)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.pages_repository }}
+          ref: ${{ inputs.pages_ref }}
+          token: ${{ secrets.pages_deploy_token }}
+          path: pages
+
+      - name: Sync built site into /${{ inputs.publish_path }}
+        run: |
+          set -euo pipefail
+          mkdir -p "pages/${{ inputs.publish_path }}"
+          rsync -a --delete ${{ inputs.mkdocs_site_dir }}/ "pages/${{ inputs.publish_path }}/"
+
+      - name: Commit & push to ${{ inputs.pages_ref }} (Pages repo)
+        run: |
+          set -euo pipefail
+          cd pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Publish docs from ${{ inputs.source_repository }}@${GITHUB_SHA}"
+            git push origin ${{ inputs.pages_ref }}
+          else
+            echo "No changes to publish."
+          fi
