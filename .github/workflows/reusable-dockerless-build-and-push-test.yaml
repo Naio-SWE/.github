@@ -1,0 +1,111 @@
+#Test
+#
+
+name: Reusable Dockerless Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        required: false
+        type: string 
+        default: 'Dockerfile'
+        description: 'Path to the dockerfile'
+      build_target:
+        required: false
+        type: string
+        default: ''
+        description: 'Build target for multi-stage builds (e.g., ci, production)'
+      registry: 
+        required: true
+        type: string 
+        description: 'Container registry URL'
+      image_name: 
+        required: true
+        type: string
+        description: 'Image name (without the registry)'
+      custom_tag:
+        required: false
+        type: string
+        default: ''
+        description: 'Optional custom tag for the image (e.g., v1.2.3, staging, production)'
+      runner_label: 
+        required: false
+        type: string 
+        default: 'gpu-runners'
+        description: 'Runner label to use'
+    secrets:
+      registry_username:
+        required: true
+      registry_password: 
+        required: true 
+
+env:
+  REGISTRY: ${{ inputs.registry }}
+  IMAGE_NAME: ${{ inputs.image_name }}
+  STORAGE_DRIVER: overlay
+  BUILDAH_ISOLATION: chroot
+  DOCKERFILE: ${{ inputs.dockerfile }}
+  BUILD_TARGET: ${{ inputs.build_target }}
+  CUSTOM_TAG: ${{ inputs.custom_tag }}
+
+jobs:
+  build-and-push:
+    runs-on: ${{ inputs.runner_label }}
+    container:
+      image: quay.io/buildah/stable:latest
+      options: >-
+        --user 0
+        --privileged
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined
+        --device /dev/fuse
+        --cap-add SYS_ADMIN
+        --cap-add SYS_CHROOT
+        --cap-add SETUID
+        --cap-add SETGID
+        -v /var/lib/containers:/var/lib/containers
+        -v /var/cache/buildah:/var/cache/buildah
+    
+    steps:
+      - name: Checkout calling repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      
+      - name: Checkout .github repo for scripts
+        uses: actions/checkout@v5
+        with:
+          repository: Naio-SWE/.github
+          path: .github-repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Show environment info
+        run: ./.github-repo/scripts/dockerless-build-action/show-env.sh
+      
+      - name: Configure Buildah storage
+        run: ./.github-repo/scripts/dockerless-build-action/configure-storage.sh
+      
+      - name: Login to registry
+        env:
+          REGISTRY_USERNAME: ${{ secrets.registry_username }}
+          REGISTRY_PASSWORD: ${{ secrets.registry_password }}
+        run: ./.github-repo/scripts/dockerless-build-action/registry-login.sh
+      
+      - name: Build Docker image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: ./.github-repo/scripts/dockerless-build-action/build-image.sh
+      
+      - name: Push image to registry
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: ./.github-repo/scripts/dockerless-build-action/push-image.sh
+      
+      - name: Verify image
+        run: ./.github-repo/scripts/dockerless-build-action/verify-image.sh
+      
+      - name: Cleanup
+        if: always()
+        run: ./.github-repo/scripts/dockerless-build-action/cleanup.sh
