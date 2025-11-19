@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#build-image.sh
+#build-image-test.sh
 set -e
 
 echo "========================================="
