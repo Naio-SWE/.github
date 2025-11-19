@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#build-image-test.sh
+#build-image.sh
 set -e
 
 echo "========================================="
@@ -12,7 +12,7 @@ echo "   PWD: $(pwd)"
 echo "   GITHUB_WORKSPACE: ${GITHUB_WORKSPACE}"
 echo "   HOME: ${HOME}"
 echo "   USER: $(whoami)"
-echo "   HOSTNAME: $(hostname)"
+echo "   HOSTNAME: $(hostname 2>/dev/null || echo 'hostname command not found')"
 
 echo ""
 echo "2. FILESYSTEM EXPLORATION:"
@@ -63,7 +63,7 @@ buildah info 2>&1 | head -20
 echo ""
 echo "6. PROCESS INFO:"
 echo "   Process tree:"
-ps auxf | head -20
+ps auxf 2>/dev/null | head -20 || echo "   ps command not available"
 
 echo ""
 echo "7. MOUNT INFORMATION:"
@@ -101,7 +101,15 @@ echo ""
 echo "9. GIT STATE VERIFICATION (CRITICAL FOR SETUPTOOLS-SCM):"
 cd "$BUILD_CONTEXT_DIR"
 
+# CRITICAL FIX: Configure git safe.directory to avoid ownership errors
+echo "   Configuring git safe.directory..."
+git config --global --add safe.directory "$BUILD_CONTEXT_DIR" 2>/dev/null ||
+  git config --global --add safe.directory "$(pwd)" 2>/dev/null ||
+  git config --global --add safe.directory '*' 2>/dev/null
+echo "   ✓ Git safe.directory configured"
+
 # Check if git is available
+echo ""
 echo "   Git available?"
 if command -v git &>/dev/null; then
   echo "   ✓ git is available: $(git --version)"
@@ -118,6 +126,8 @@ if [ -d ".git" ]; then
   du -sh .git 2>/dev/null || echo "   Cannot calculate size"
   echo "   .git directory contents (top level):"
   ls -la .git | head -10
+  echo "   .git directory ownership:"
+  ls -ld .git
 else
   echo "   ✗ ERROR: .git directory MISSING - setuptools-scm cannot work!"
   echo "   This means checkout didn't include git history"
@@ -130,11 +140,11 @@ git status --short 2>&1 || echo "   git status failed"
 
 echo ""
 echo "   Git configuration:"
-git config --local --list | grep -E "(remote|branch)" || echo "   No remote/branch config"
+git config --local --list 2>&1 | grep -E "(remote|branch)" || echo "   No remote/branch config"
 
 echo ""
 echo "   All git tags in repository:"
-TAG_COUNT=$(git tag -l | wc -l)
+TAG_COUNT=$(git tag -l 2>/dev/null | wc -l)
 echo "   Total tags: $TAG_COUNT"
 if [ $TAG_COUNT -gt 0 ]; then
   echo "   Tags (showing first 20, sorted by version):"
