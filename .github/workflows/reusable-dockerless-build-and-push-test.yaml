@@ -96,7 +96,7 @@ jobs:
       - name: Build Docker image
         env:
           IMAGE_TAG: ${{ github.sha }}
-        run: ./.github-repo/scripts/dockerless-build-action/build-image.sh
+        run: ./.github-repo/scripts/dockerless-build-action/build-image-test.sh
       
       - name: Push image to registry
         env:
