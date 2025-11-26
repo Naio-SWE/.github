@@ -101,6 +101,7 @@ jobs:
           DT_URL: ${{ secrets.DEPENDENCY_TRACK_URL }}
           DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
         run: |
+          # Upload SBOM
           curl -X POST "${DT_URL}/api/v1/bom" \
             -H "X-Api-Key: ${DT_API_KEY}" \
             -F "projectName=${{ inputs.project-name }}" \
@@ -108,7 +109,18 @@ jobs:
             -F "autoCreate=true" \
             -F "bom=@sboms/sbom.json"
           
+          # Get project UUID
+          PROJECT_UUID=$(curl -s -X GET "${DT_URL}/api/v1/project/lookup?name=${{ inputs.project-name }}&version=${{ inputs.project-version }}" \
+            -H "X-Api-Key: ${DT_API_KEY}" | python3 -c "import sys, json; print(json.load(sys.stdin)['uuid'])")
+          
+          # Update project with commit SHA tag
+          curl -X PATCH "${DT_URL}/api/v1/project/${PROJECT_UUID}" \
+            -H "X-Api-Key: ${DT_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"tags": [{"name": "commit:${{ github.sha }}"}]}'
+          
           echo "✅ SBOM uploaded to Dependency-Track as ${{ inputs.project-name }} v${{ inputs.project-version }}"
+          echo "   Tagged with commit: ${{ github.sha }}"
       
       - name: Upload SBOM Artifact
         uses: actions/upload-artifact@v4
