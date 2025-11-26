@@ -1,0 +1,117 @@
+name: Reusable SBOM Generation
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: 'Project name in Dependency-Track'
+        required: true
+        type: string
+      project-version:
+        description: 'Project version in Dependency-Track'
+        required: false
+        type: string
+        default: '1'
+      python-version:
+        description: 'Python version to use'
+        required: false
+        type: string
+        default: '3.11'
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '20'
+      runs-on:
+        description: 'Runner labels (JSON array)'
+        required: false
+        type: string
+        default: '["self-hosted", "Linux", "X64", "noble-runners"]'
+      internal-package-pattern:
+        description: 'Grep pattern to filter internal packages'
+        required: false
+        type: string
+        default: 'yasp\.'
+      scripts-ref:
+        description: 'Git ref for scripts repo (branch, tag, or SHA)'
+        required: false
+        type: string
+        default: 'main'
+    secrets:
+      DEPENDENCY_TRACK_URL:
+        description: 'Dependency-Track server URL'
+        required: true
+      DEPENDENCY_TRACK_API_KEY:
+        description: 'Dependency-Track API key'
+        required: true
+
+jobs:
+  generate-sbom:
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+      
+      - name: Checkout scripts
+        uses: actions/checkout@v4
+        with:
+          repository: yasp-ai/workflows
+          ref: ${{ inputs.scripts-ref }}
+          path: .workflows
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+      
+      - name: Install Syft
+        run: |
+          mkdir -p $HOME/.local/bin
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b $HOME/.local/bin v1.0.1
+      
+      - name: Install Dependencies
+        run: |
+          chmod +x .workflows/scripts/sbom/install_dependencies.sh
+          .workflows/scripts/sbom/install_dependencies.sh "${{ inputs.internal-package-pattern }}"
+      
+      - name: Scan Packages
+        run: |
+          chmod +x .workflows/scripts/sbom/scan_packages.sh
+          .workflows/scripts/sbom/scan_packages.sh "$HOME/.local/bin/syft"
+      
+      - name: Filter Python SBOM
+        run: |
+          if [ -s /tmp/python-packages.txt ]; then
+            python3 .workflows/scripts/sbom/filter_python_sbom.py
+          fi
+      
+      - name: Merge SBOMs
+        run: |
+          python3 .workflows/scripts/sbom/merge_sboms.py
+      
+      - name: Upload to Dependency-Track
+        env:
+          DT_URL: ${{ secrets.DEPENDENCY_TRACK_URL }}
+          DT_API_KEY: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}
+        run: |
+          curl -X POST "${DT_URL}/api/v1/bom" \
+            -H "X-Api-Key: ${DT_API_KEY}" \
+            -F "projectName=${{ inputs.project-name }}" \
+            -F "projectVersion=${{ inputs.project-version }}" \
+            -F "autoCreate=true" \
+            -F "bom=@sboms/sbom.json"
+          
+          echo "✅ SBOM uploaded to Dependency-Track as ${{ inputs.project-name }} v${{ inputs.project-version }}"
+      
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ inputs.project-name }}
+          path: sboms/sbom.json
+          retention-days: 90
