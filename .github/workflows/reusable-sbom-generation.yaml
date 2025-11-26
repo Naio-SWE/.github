@@ -57,7 +57,7 @@ jobs:
       - name: Checkout scripts
         uses: actions/checkout@v4
         with:
-          repository: yasp-ai/workflows
+          repository: Naio-SWE/.github
           ref: ${{ inputs.scripts-ref }}
           path: .workflows
       
